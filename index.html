@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offer Image Generator</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <div class="container">
+    <h1>🖼️ Create Offer Image</h1>
+
+    <form enctype="multipart/form-data" id="imageForm">
+
+            
+      <label for="companyLogo">Company Logo (Top White Bar):</label>
+      <input type="file" id="companyLogo" name="companyLogo" accept="image/*">
+
+      <label for="offerImage">Offer Product Image (Place on Pedestal):</label>
+      <input type="file" id="offerImage" name="offerImage" accept="image/*">
+      
+
+      <label for="offerText">Offer Text (Middle White Bar – supports multiple lines):</label>
+<input type="text" id="offerText" name="offerText" maxlength="100" placeholder="Enter offer text (max 100 characters)">
+<small id="charCount" style="color: gray;">0 /100</small>
+
+
+      <hr>
+
+      <label for="shopName">Shop Name:</label>
+<input 
+  type="text" 
+  id="shopName" 
+  name="shopName" 
+  maxlength="50" 
+  placeholder="Enter shop name (max 50 characters)">
+
+
+      <label for="shopAddress">Shop Address / Location:</label>
+<input 
+  type="text" 
+  id="shopAddress" 
+  name="shopAddress" 
+  maxlength="100" 
+  placeholder="Enter shop address (max 100 characters)">
+
+
+      <label for="contact">Contact Number 1:</label>
+<input 
+  type="text" 
+  id="contact" 
+  name="contact" 
+  maxlength="10" 
+  pattern="\d{10}" 
+  inputmode="numeric" 
+  placeholder="Enter 10-digit mobile number">
+
+
+      <label for="contact2">Contact Number 2 (Optional):</label>
+<input 
+  type="text" 
+  id="contact2" 
+  name="contact2" 
+  maxlength="10" 
+  pattern="\d{10}" 
+  inputmode="numeric" 
+  placeholder="Enter 10-digit mobile number (optional)">
+
+
+      
+
+       <h2>🎨 Change Only Background Color </h2>
+    
+<div class="controls"> 
+    <button data-file="Images/Artboard 1 copy 3.jpg" data-color="#9400D3" style="background-color: #9400D3; color: white;">Violet</button>
+    <button data-file="Images/Artboard 1 copy 2.jpg" data-color="#008000" style="background-color: #008000; color: white;">Dark Green</button>
+    <button data-file="Images/Artboard 1.jpg" data-color="#FF0000" class="selected" style="background-color: #FF0000; color: white;">Red</button>
+</div>
+
+
+   
+
+      <button type="button" id="generateButton">🎨 Generate Offer Image</button>
+    </form>
+
+    
+    <canvas id="canvas" width="800" height="800"></canvas>
+<h2 id="check">Preview & Download</h2>
+    <a id="downloadLink" href="#" download="Offer image">⬇️ Download Offer Image</a>
+  </div>
+
+  <script src="index.js"></script>
+</body>
+</html>

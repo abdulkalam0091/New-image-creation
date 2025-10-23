@@ -1,0 +1,148 @@
+/* === Body Styling === */
+body {
+  margin: 0;
+  font-family: "Poppins", Arial, sans-serif;
+  background: linear-gradient(to bottom right, #fff55b, #ffea00);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  padding: 40px;
+  box-sizing: border-box;
+}
+
+
+ 
+
+
+/* === Main Container === */
+.container {
+  background: white;
+  border-radius: 20px;
+  padding: 30px 40px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 750px;
+}
+
+/* === Heading === */
+h1 {
+  text-align: center;
+  background: #ffcc00;
+  color: #333;
+  padding: 15px;
+  border-radius: 10px;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+  font-size: 26px;
+  margin-bottom: 20px;
+}
+
+/* === Subheading === */
+h2 {
+  
+  color: #444;
+  margin-top: 25px;
+  font-size: 20px;
+  background: #fff5cc;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  
+}
+
+/* === Form === */
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* === Labels === */
+label {
+  font-weight: 600;
+  color: #222;
+}
+
+/* === Input Fields === */
+input[type="file"],
+input[type="text"] {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+  width: 100%;
+  transition: border-color 0.3s;
+}
+
+input[type="file"]:focus,
+input[type="text"]:focus {
+  outline: none;
+  border-color: #ffb400;
+  box-shadow: 0 0 4px #ffdd33;
+}
+
+/* === Generate Button === */
+#generateButton {
+  background-color: #ffb400;
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  transition: all 0.3s ease;
+  margin-top: 10px;
+}
+
+#generateButton:hover {
+  background-color: #e6a100;
+  transform: scale(1.03);
+}
+
+/* === Canvas Preview === */
+canvas {
+  display: block;
+  margin: 20px auto;
+  border-radius: 10px;
+  border: 2px dashed #999;
+  background: #f8f8f8;
+  max-width: 100%;
+}
+
+/* === Download Button === */
+#downloadLink {
+  display: block;
+  text-align: center;
+  background-color: #0077ff;
+  color: white;
+  font-weight: bold;
+  text-decoration: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  margin: 15px auto;
+  width: fit-content;
+  transition: all 0.3s ease;
+}
+
+#downloadLink:hover {
+  background-color: #005ed1;
+  transform: scale(1.05);
+}
+
+/* === Horizontal Line === */
+hr {
+  margin: 20px 0;
+  border: none;
+  border-top: 2px solid #eee;
+}
+
+#check{
+  text-align: center;
+}
+
+.controls{
+  text-align: center;
+
+  height: 15px;
+}
