@@ -9,6 +9,7 @@ let currentBgSource = 'Images/Artboard 1.jpg';
 
 
 
+
 // --- Background Color Selection Logic ---
 const colorButtons = document.querySelectorAll('button[data-file]'); 
 colorButtons.forEach(button => {
@@ -289,7 +290,8 @@ if (!document.getElementById('contact').value.trim()) {
                 const offerTextBoxY = H * 0.71;
                 const offerTextBoxHeight = H * 0.11;
                 const offerTextCenterX = W * 0.5;
-                const offerTextMaxWidth = W * 0.90;
+                const offerTextMaxWidth = W * 1.30;
+                
 
                 let fontSize = 30;
                 let lineHeightText = 46;
@@ -331,7 +333,7 @@ if (!document.getElementById('contact').value.trim()) {
                 // Use the selected color for the Offer Text
                 ctx.fillStyle = selectedColor; 
 
-                const numLinesToDraw = Math.min(linesToDraw.length, 4);
+                const numLinesToDraw = Math.min(linesToDraw.length, 6);
                 const totalTextHeight = (numLinesToDraw * lineHeightText);
 
                 // Calculate startY to center the entire text block height
