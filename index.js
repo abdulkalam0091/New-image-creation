@@ -287,71 +287,88 @@ if (!document.getElementById('contact').value.trim()) {
                 }
 
                 // --- 4. Draw Offer Text (DYNAMIC SIZING & PERFECT ALIGNMENT) ---
-                const offerTextBoxY = H * 0.71;
+              // --- Offer Text Rendering with Auto Font Scaling ---
+// === OFFER TEXT AUTO FIT (Malayalam + Multi-line Support) ===
+ const offerTextBoxY = H * 0.71;
                 const offerTextBoxHeight = H * 0.11;
                 const offerTextCenterX = W * 0.5;
-                const offerTextMaxWidth = W * 1.30;
+                const offerTextMaxWidth = W * 0.70;
                 
 
-                let fontSize = 30;
-                let lineHeightText = 46;
+let fontSize = 22;                 
+let lineHeightText = 38;
 
-                // Adaptive sizing logic: Determine number of lines needed at max font size
-                ctx.font = 'bold 60px Arial';
-                let mockLines = [];
-                const words = offerText.split(' ');
-                let line = '';
-                for (let n = 0; n < words.length; n++) {
-                    const testLine = line + words[n] + ' ';
-                    const metrics = ctx.measureText(testLine);
-                    if (metrics.width > offerTextMaxWidth && n > 0) {
-                        mockLines.push(line.trim());
-                        line = words[n] + ' ';
-                    } else {
-                        line = testLine;
-                    }
-                }
-                mockLines.push(line.trim());
+// Function: wrap text based on available width
+function wrapText(ctx, text, maxWidth) {
+    const words = text.split(' ');
+    let lines = [];
+    let line = '';
 
-                let linesToDraw = mockLines;
-                const linesRequired = mockLines.length;
+    for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+            lines.push(line.trim());
+            line = words[n] + ' ';
+        } else {
+            line = testLine;
+        }
+    }
+    lines.push(line.trim());
+    return lines;
+}
 
-                // Robust Font Size Scaling
-                if (linesRequired >= 4) {
-                    fontSize = 18;
-                    lineHeightText = 22;
-                } else if (linesRequired === 3) {
-                    fontSize = 24;
-                    lineHeightText = 28;
-                } else {
-                    fontSize = 32;
-                    lineHeightText = 36;
-                }
 
-                ctx.font = `bold ${fontSize}px Arial`;
-                ctx.textAlign = 'center';
-                // Use the selected color for the Offer Text
-                ctx.fillStyle = selectedColor; 
 
-                const numLinesToDraw = Math.min(linesToDraw.length, 6);
-                const totalTextHeight = (numLinesToDraw * lineHeightText);
+// Try to find best font size to fit inside box height
+let lines;
 
-                // Calculate startY to center the entire text block height
-                let startY = offerTextBoxY + (offerTextBoxHeight / 2) - (totalTextHeight / 2);
 
-                // FINAL BASELINE CORRECTION
-                const baselineCorrection = (numLinesToDraw === 1) ? (fontSize * 0.4) :
-                    (numLinesToDraw === 2) ? (fontSize * 0.3) :
-                    (fontSize * 0.25);
-                startY += baselineCorrection;
+do {
+    ctx.font = `bold ${fontSize}px "Noto Sans Malayalam", Arial`;
+    lines = wrapText(ctx, offerText, offerTextMaxWidth, 4); // <- limit to 4 lines
+    lineHeight = fontSize * 1.25;
+    const totalHeight = lines.length * lineHeight;
+    if (totalHeight > offerTextBoxHeight) {
+        fontSize -= 2; // shrink font gradually until fits
+    } else {
+        break;
+    }
+} while (fontSize > 12);
+do {
+    ctx.font = `bold ${fontSize}px "Noto Sans Malayalam", Arial`;
+    lines = wrapText(ctx, offerText, offerTextMaxWidth);
+    lineHeight = fontSize * 1.25;
+    const totalHeight = lines.length * lineHeight;
+    if (totalHeight > offerTextBoxHeight) {
+        fontSize -= 2; // shrink font gradually until fits
+    } else {
+        break;
+    }
+} while (fontSize > 12);
 
-                let currentY = startY;
-                for (let i = 0; i < numLinesToDraw; i++) {
-                    if (currentY + lineHeightText < offerTextBoxY + offerTextBoxHeight + 5) {
-                        ctx.fillText(linesToDraw[i], offerTextCenterX, currentY);
-                    }
-                    currentY += lineHeightText;
-                }
+ctx.font = `bold ${fontSize}px "Noto Sans Malayalam", Arial`;
+ctx.textAlign = 'center';
+ctx.fillStyle = selectedColor;
+
+// 1. Set the baseline to middle for accurate centering
+ctx.textBaseline = 'middle'; 
+
+// 2. Calculate the vertical center of the box
+const textCenterY = offerTextBoxY + (offerTextBoxHeight / 4);
+const totalTextHeight = lines.length * lineHeight;
+
+// 3. Find the Y-coordinate for the *center* of the first line
+let firstLineCenterY = textCenterY - (totalTextHeight / 4) + (lineHeight / 2);
+
+// Draw wrapped text lines, using the calculated center point
+lines.forEach((line, i) => {
+    ctx.fillText(line, offerTextCenterX, firstLineCenterY + i * lineHeight);
+});
+
+// Reset baseline to default if needed elsewhere (optional but good practice)
+// ctx.textBaseline = 'alphabetic';
+
 
                 // --- 5. Draw Footer Content (Contact Details and Footer Logo) ---
                 const footerBoxY = H * 0.85;
