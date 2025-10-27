@@ -25,8 +25,9 @@
       
 
       <label for="offerText">Offer Text (Middle White Bar – supports multiple lines):</label>
-<input type="text" id="offerText" name="offerText" maxlength="120" placeholder="Enter offer text (max 120 characters)">
-<small id="charCount" style="color: gray;"></small>
+<textarea id="offerText" name="offerText" maxlength="120" placeholder="Type your offer message here..."></textarea>
+<small id="charCount">0 / 120 characters</small>
+
 
 
       <hr>
@@ -41,12 +42,14 @@
 
 
       <label for="shopAddress">Shop Address / Location:</label>
-<input 
-  type="text" 
+<textarea 
   id="shopAddress" 
   name="shopAddress" 
   maxlength="100" 
-  placeholder="Enter shop address (max 100 characters)">
+  placeholder="Enter shop address or location details..."
+></textarea>
+<small id="addressCount">0 / 100 characters</small>
+
 
 
       <label for="contact">Contact Number 1:</label>

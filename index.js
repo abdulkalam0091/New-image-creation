@@ -299,24 +299,31 @@ let fontSize = 22;                
 let lineHeightText = 38;
 
 // Function: wrap text based on available width
+// Function: wrap text based on available width and manual line breaks
 function wrapText(ctx, text, maxWidth) {
-    const words = text.split(' ');
-    let lines = [];
+  const paragraphs = text.split('\n'); // split where user pressed Enter
+  let lines = [];
+
+  paragraphs.forEach(paragraph => {
+    const words = paragraph.split(' ');
     let line = '';
 
     for (let n = 0; n < words.length; n++) {
-        const testLine = line + words[n] + ' ';
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth && n > 0) {
-            lines.push(line.trim());
-            line = words[n] + ' ';
-        } else {
-            line = testLine;
-        }
+      const testLine = line + words[n] + ' ';
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && n > 0) {
+        lines.push(line.trim());
+        line = words[n] + ' ';
+      } else {
+        line = testLine;
+      }
     }
-    lines.push(line.trim());
-    return lines;
+    lines.push(line.trim()); // push last line of paragraph
+  });
+
+  return lines;
 }
+
 
 
 
