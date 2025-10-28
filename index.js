@@ -113,12 +113,31 @@ function drawCanvas(imageSrc) {
 function updateDownloadLink() {
     const dataURL = canvas.toDataURL('image/png');
     const downloadLink = document.getElementById('downloadLink');
-    const shopName = document.getElementById('shopName').value.trim() || 'OfferImage';
-    
+
+    // ✅ Get shop name
+    const rawShop = document.getElementById('shopName')?.value || '';
+    const shopName = rawShop.trim() || 'Shop';
+
+    // ✅ Get offer text (first line only)
+    const rawOffer = document.getElementById('offerText')?.value || '';
+    const firstLine = rawOffer.split(/\r?\n/)[0].trim();
+    const offerText = firstLine || 'Offer';
+
+    // ✅ Clean for file name
+    const cleanShop = shopName.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_');
+    const cleanOffer = offerText.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_');
+
+    // ✅ Combine shop + offer
+    const fileName = `${cleanShop}_${cleanOffer}.png`;
+
+    console.log('📁 File name will be:', fileName); // debug check
+
+    // ✅ Apply to download
     downloadLink.href = dataURL;
-    downloadLink.download = shopName + '.png';
+    downloadLink.download = fileName;
     downloadLink.style.display = 'inline-block';
 }
+
 
 
 
@@ -295,7 +314,7 @@ if (!document.getElementById('contact').value.trim()) {
                 const offerTextMaxWidth = W * 0.70;
                 
 
-let fontSize = 22;                 
+let fontSize = 24;                 
 let lineHeightText = 38;
 
 // Function: wrap text based on available width
@@ -378,6 +397,81 @@ lines.forEach((line, i) => {
 
 
                 // --- 5. Draw Footer Content (Contact Details and Footer Logo) ---
+
+// ✅ --- ADD THIS ABOVE YOUR FOOTER CODE ---
+
+// Left aligned wrap text — supports Enter key
+function wrapTextLeft(ctx, text, x, startY, maxWidth, lineHeight, maxLines) {
+  const paragraphs = text.split('\n');
+  let y = startY;
+  let lineCount = 0;
+
+  for (let p = 0; p < paragraphs.length; p++) {
+    const words = paragraphs[p].split(' ');
+    let line = '';
+
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line + words[n] + ' ';
+      const metrics = ctx.measureText(testLine);
+
+      if (metrics.width > maxWidth && n > 0) {
+        ctx.fillText(line.trim(), x, y);
+        line = words[n] + ' ';
+        y += lineHeight;
+        lineCount++;
+        if (maxLines && lineCount >= maxLines) return { finalY: y };
+      } else {
+        line = testLine;
+      }
+    }
+
+    ctx.fillText(line.trim(), x, y);
+    y += lineHeight;
+    lineCount++;
+    if (maxLines && lineCount >= maxLines) return { finalY: y };
+  }
+
+  return { finalY: y };
+}
+
+// Right aligned wrap text — supports Enter key
+function wrapTextRight(ctx, text, x, startY, maxWidth, lineHeight, maxLines) {
+  const paragraphs = text.split('\n');
+  let y = startY;
+  let lineCount = 0;
+
+  for (let p = 0; p < paragraphs.length; p++) {
+    const words = paragraphs[p].split(' ');
+    let line = '';
+
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line + words[n] + ' ';
+      const metrics = ctx.measureText(testLine);
+
+      if (metrics.width > maxWidth && n > 0) {
+        ctx.fillText(line.trim(), x, y);
+        line = words[n] + ' ';
+        y += lineHeight;
+        lineCount++;
+        if (maxLines && lineCount >= maxLines) return { finalY: y };
+      } else {
+        line = testLine;
+      }
+    }
+
+    ctx.fillText(line.trim(), x, y);
+    y += lineHeight;
+    lineCount++;
+    if (maxLines && lineCount >= maxLines) return { finalY: y };
+  }
+
+  return { finalY: y };
+}
+
+
+
+
+
                 const footerBoxY = H * 0.85;
                 const footerBoxH = H * 0.10;
                 const lineHeightFooter = 16;
