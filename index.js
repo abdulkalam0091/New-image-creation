@@ -1,567 +1,538 @@
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-let selectedColor = '#FF0000'; // Default color for text (Red)
 
-// currentBgSource MUST be initialized to a valid path.
-let currentBgSource = 'Images/Artboard 1.jpg'; 
+// UI state
+let selectedColor = '#FF0000';
+let currentBgSource = 'Images/Artboard 1.jpg';
 
+// Offer image popup / rotation state
+let offerImageFile = null;
+let offerImageDataURL = null; // holds original OR rotated image dataURL
+let offerImageRotation = 0;    // 0, 90, 180, 270
 
+// -------------------- popup preview & rotate --------------------
+function previewOfferImage(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    offerImageFile = file;
+    offerImageRotation = 0;
 
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        offerImageDataURL = e.target.result;
+        showOfferPopup();
+    };
+    reader.readAsDataURL(file);
+}
 
+function showOfferPopup() {
+    const popup = document.getElementById('offerPopup');
+    if (popup) popup.style.display = 'flex';
+    drawOfferPreview();
+}
 
+/* Draw preview in the popup canvas using current offerImageDataURL and offerImageRotation.
+   This function only draws a preview — it does NOT mutate offerImageDataURL except when Confirm is pressed.
+*/
+function drawOfferPreview(forceRedraw = false) {
+    const previewCanvas = document.getElementById('offerPreviewCanvas');
+    if (!previewCanvas || !offerImageDataURL) return;
+    const pCtx = previewCanvas.getContext('2d');
 
-// --- Background Color Selection Logic ---
-const colorButtons = document.querySelectorAll('button[data-file]'); 
+    const img = new Image();
+    img.onload = () => {
+        const w = previewCanvas.width;
+        const h = previewCanvas.height;
+        pCtx.clearRect(0, 0, w, h);
+
+        pCtx.save();
+        pCtx.translate(w / 2, h / 2);
+        pCtx.rotate((offerImageRotation * Math.PI) / 180);
+
+        // scale to fit box
+        const scale = Math.min(w / img.width, h / img.height);
+        const drawW = img.width * scale;
+        const drawH = img.height * scale;
+
+        pCtx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+        pCtx.restore();
+    };
+
+    img.onerror = () => {
+        console.error('Failed to load preview image');
+        if (forceRedraw) return;
+        setTimeout(() => drawOfferPreview(true), 80);
+    };
+
+    img.src = offerImageDataURL;
+}
+
+function rotateOfferImage() {
+    offerImageRotation = (offerImageRotation + 90) % 360;
+    drawOfferPreview();
+}
+
+function confirmOfferImage() {
+    // Save rotated preview back into offerImageDataURL (so main canvas uses rotated image)
+    const previewCanvas = document.getElementById('offerPreviewCanvas');
+    if (!previewCanvas) {
+        // fallback: if something goes wrong, just close popup
+        document.getElementById('offerPopup').style.display = 'none';
+        return;
+    }
+
+    // If rotation is 0, no change; otherwise the preview canvas already displays rotated image,
+    // but to be safe we snapshot the preview canvas to a new dataURL.
+    offerImageDataURL = previewCanvas.toDataURL('image/png');
+
+    // Keep the original file input as-is (do not clear). This ensures user can still re-open popup.
+    document.getElementById('offerPopup').style.display = 'none';
+
+    // Redraw main canvas preview so user immediately sees result when they click Generate (or we can auto-generate)
+    // It's better to let user click Generate, but if you want auto-redraw uncomment:
+    // generateImage();
+}
+
+function closeOfferPopup() {
+    document.getElementById('offerPopup').style.display = 'none';
+    // Cancel should NOT overwrite confirmed image; but it's reasonable to discard the preview if user cancels.
+    // We'll discard only temporary preview state if user cancels before confirming.
+    // Keep the file input value so user can re-open preview:
+    // do NOT clear offerImageDataURL here — but to follow a clear UX, we'll reset (you can change).
+    // I'll reset to null to reflect "user cancelled" behaviour:
+    offerImageFile = null;
+    offerImageDataURL = null;
+    offerImageRotation = 0;
+    document.getElementById('offerImage').value = ''; // user cancelled selection
+}
+
+// -------------------- background color buttons --------------------
+const colorButtons = document.querySelectorAll('button[data-file]');
 colorButtons.forEach(button => {
     button.addEventListener('click', (e) => {
-        e.preventDefault(); 
-        
-        colorButtons.forEach(btn => btn.classList.remove('selected'));
-        e.target.classList.add('selected');
+        e.preventDefault();
+        colorButtons.forEach(b => b.classList.remove('selected'));
+        e.currentTarget.classList.add('selected');
 
-        // Update the current background source path
-        currentBgSource = e.target.getAttribute('data-file');
-        
-        // Update the color for the text elements
-        selectedColor = e.target.getAttribute('data-color');
-        
-        // Generate the image immediately upon background change
-        generateImage(); 
+        currentBgSource = e.currentTarget.getAttribute('data-file');
+        selectedColor = e.currentTarget.getAttribute('data-color') || selectedColor;
+
+        // immediate regenerate to show change
+        generateImage();
     });
 });
 
-document.getElementById('generateButton').addEventListener('click', generateImage);
+// -------------------- unified image loader --------------------
+/* loadImage supports:
+   - sourceId === 'templateBackground' -> path from currentBgSource
+   - sourceId === 'companyLogo' -> takes file input companyLogo if present
+   - sourceId === 'offerImage' -> uses offerImageDataURL (confirmed rotated image if confirmed) OR file input if no dataURL
+*/
+function loadImage(sourceId, callback) {
+    // 1) offerImage priority: if we already have a dataURL (confirmed rotated), use it
+    if (sourceId === 'offerImage' && offerImageDataURL) {
+        const img = new Image();
+        img.onload = () => callback(img, false);
+        img.onerror = () => callback(null, false);
+        img.src = offerImageDataURL;
+        return;
+    }
 
-
-// --- Helper Functions: Simplified loadImage for Background (path) and other inputs (file) ---
-
-function loadImage(sourceId, callback, checkAspect = false) {
-    let file = null;
-    let path = null;
-
-    if (sourceId === 'templateBackground') {
-        // BACKGROUND TEMPLATE: Always use the path set by the buttons
-        path = currentBgSource;
-    } else {
-        // OTHER INPUTS (Logo, Offer Image): Try to load file from the input ID
-        const fileInput = document.getElementById(sourceId);
+    // 2) otherwise check file input for offerImage
+    if (sourceId === 'offerImage') {
+        const fileInput = document.getElementById('offerImage');
         if (fileInput && fileInput.files.length > 0) {
-            file = fileInput.files[0];
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => callback(img, false);
+                img.onerror = () => callback(null, false);
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            return;
+        }
+        // fallback: no offer image found
+        callback(null, false);
+        return;
+    }
+
+    // 3) companyLogo: prefer uploaded file; if nothing, return null (you can change to fallback path)
+    if (sourceId === 'companyLogo') {
+        const fileInput = document.getElementById('companyLogo');
+        if (fileInput && fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => callback(img, false);
+                img.onerror = () => callback(null, false);
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            return;
+        } else {
+            // no logo uploaded
+            callback(null, false);
+            return;
         }
     }
-    
-    // CASE 1: Load from a File Object (for logo/offer image)
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                if (checkAspect) {
-                    const aspectRatio = img.width / img.height;
-                    if (aspectRatio < 0.99 || aspectRatio > 1.01) {
-                        alert(`🛑 ERROR: The Offer Product Image must be a SQUARE (1:1 Aspect Ratio). Your image ratio is ${aspectRatio.toFixed(2)}. Please upload a square image.`);
-                        callback(null, true);
-                        return;
-                    }
-                }
-                callback(img, false);
-            };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
-        
-    // CASE 2: Load from a Path (for background template)
-    } else if (path) {
+
+    // 4) templateBackground: use currentBgSource path
+    if (sourceId === 'templateBackground') {
         const img = new Image();
-        img.onload = () => {
-             callback(img, false);
-        };
+        img.onload = () => callback(img, false);
         img.onerror = () => {
-             alert(`Could not load background image from path: ${path}. Make sure the file exists.`);
-             callback(null, false);
+            console.warn('Background load error for', currentBgSource);
+            callback(null, false);
         };
-        img.src = path;
-    } else {
-        // No image source found for this element
-        callback(null, false);
+        img.src = currentBgSource;
+        return;
     }
+
+    // fallback
+    callback(null, false);
 }
 
-
-
-// Handle button clicks
-document.querySelectorAll('.controls button').forEach(button => {
-    button.addEventListener('click', () => {
-        selectedImageSrc = button.getAttribute('data-file');
-        drawCanvas(selectedImageSrc);
-    });
-});
-
-// Draw canvas function
-function drawCanvas(imageSrc) {
-    const img = new Image();
-    img.src = imageSrc;
-    img.onload = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        // Enable download after image is drawn
-        updateDownloadLink();
-    };
-}
-
-// Download function
+// -------------------- download helper --------------------
 function updateDownloadLink() {
     const dataURL = canvas.toDataURL('image/png');
     const downloadLink = document.getElementById('downloadLink');
 
-    // ✅ Get shop name
     const rawShop = document.getElementById('shopName')?.value || '';
     const shopName = rawShop.trim() || 'Shop';
 
-    // ✅ Get offer text (first line only)
     const rawOffer = document.getElementById('offerText')?.value || '';
     const firstLine = rawOffer.split(/\r?\n/)[0].trim();
     const offerText = firstLine || 'Offer';
 
-    // ✅ Clean for file name
     const cleanShop = shopName.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_');
     const cleanOffer = offerText.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_');
 
-    // ✅ Combine shop + offer
     const fileName = `${cleanShop}_${cleanOffer}.png`;
 
-    console.log('📁 File name will be:', fileName); // debug check
-
-    // ✅ Apply to download
     downloadLink.href = dataURL;
     downloadLink.download = fileName;
     downloadLink.style.display = 'inline-block';
 }
 
-
-
-
-// Function to wrap and draw text aligned to the left
+// -------------------- text wrapping utilities (kept same) --------------------
 function wrapTextLeft(ctx, text, x, y, maxWidth, lineHeight, maxLines = Infinity) {
-    const words = text.split(' ');
-    let line = '';
-    let finalY = y;
-    let lines = [];
-
-    for (let n = 0; n < words.length; n++) {
-        const testLine = line + words[n] + ' ';
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth && n > 0) {
-            lines.push(line.trim());
-            line = words[n] + ' ';
-        } else {
-            line = testLine;
-        }
-    }
-    lines.push(line.trim());
-
-    for (let i = 0; i < Math.min(lines.length, maxLines); i++) {
-        ctx.fillText(lines[i], x, finalY);
-        finalY += lineHeight;
-    }
-
-    return { finalY: finalY };
-}
-
-// Function to wrap and draw text aligned to the right
-function wrapTextRight(ctx, text, x, y, maxWidth, lineHeight) {
-    const words = text.split(' ');
-    let line = '';
-    let lines = [];
-
-    for (let n = 0; n < words.length; n++) {
-        const testLine = line + words[n] + ' ';
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth && n > 0) {
-            lines.push(line.trim());
-            line = words[n] + ' ';
-        } else {
-            line = testLine;
-        }
-    }
-    lines.push(line.trim());
-
-    let finalY = y;
-    for (let n = 0; n < lines.length; n++) {
-        ctx.fillText(lines[n], x, finalY);
-        finalY += lineHeight;
-    }
-
-    return { finalY: finalY };
-}
-
-
-// --- Main Generation Function ---
-
-function generateImage() {
-
-
-                 // --- Footer Logo: Use uploaded footer logo OR fallback to company logo ---
-// --- Alert checks for required fields ---
-// --- Alert checks for required fields ---
-// --- Alert checks for required fields ---
-if (!document.getElementById('companyLogo').files.length) {
-    alert("⚠️ Please upload the Company Logo!");
-    return;
-}
-if (!document.getElementById('offerImage').files.length) {
-    alert("⚠️ Please upload the Offer Image!");
-    return;
-}
-if (!document.getElementById('offerText').value.trim()) {
-    alert("⚠️ Please enter the Offer Text!");
-    return;
-}
-if (!document.getElementById('shopName').value.trim()) {
-    alert("⚠️ Please enter the Shop Name!");
-    return;
-}
-if (!document.getElementById('shopAddress').value.trim()) {
-    alert("⚠️ Please enter the Shop Address!");
-    return;
-}
-if (!document.getElementById('contact').value.trim()) {
-    alert("⚠️ Please enter Contact Number 1!");
-    return;
-}
-
-
-
-
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-
-    const W = 800;
-    const H = 800;
-    canvas.width = W;
-    canvas.height = H;
-
-    // Get input values
-    const offerText = document.getElementById('offerText').value.toUpperCase();
-    const shopName = document.getElementById('shopName').value;
-    const shopAddress = document.getElementById('shopAddress').value;
-    const contact = document.getElementById('contact').value;
-    const contact2 = document.getElementById('contact2').value || '';
-
-    // --- 1. Load Selected Background and Draw ---
-    // Using a placeholder ID 'templateBackground' to trigger path loading logic
-    loadImage('templateBackground', (bgImg) => {
-        if (!bgImg) {
-            return;
-        }
-        ctx.clearRect(0, 0, W, H);
-        
-        // Draw the selected background image.
-        ctx.drawImage(bgImg, 0, 0, W, H);
-
-        // --- 2. Draw Top Logo ---
-        loadImage('companyLogo', (logo) => {
-            if (logo) {
-                const topBarY = H * 0.07;
-                const topBarH = H * 0.12;
-                const logoMaxW = W * 0.55;
-                const logoMaxH = topBarH * 0.90;
-
-                const widthScale = logoMaxW / logo.width;
-                const heightScale = logoMaxH / logo.height;
-                const scale = Math.min(widthScale, heightScale, 1.0);
-
-                const finalW = logo.width * scale;
-                const finalH = logo.height * scale;
-
-                const logoX = W * 0.5 - finalW / 2;
-                const logoY = topBarY + (topBarH / 2) - (finalH / 2) + 3;
-                ctx.drawImage(logo, logoX, logoY, finalW, finalH);
-            }
-
-            // --- 3. Draw Product Image (SMALLER & HIGHER) ---
-            loadImage('offerImage', (offerImg, ratioFailed) => {
-                if (ratioFailed) {
-                    return;
-                }
-
-                if (offerImg) {
-                    const pedestalTopY = H * 0.68;
-                    const offerAreaTopY = H * 0.28;
-                    const desiredMaxWidth = W * 0.50;
-                    const desiredMaxHeight = (pedestalTopY - offerAreaTopY) * 0.7;
-
-                    const widthScale = desiredMaxWidth / offerImg.width;
-                    const heightScale = desiredMaxHeight / offerImg.height;
-                    const scale = Math.min(widthScale, heightScale);
-
-                    const finalW = offerImg.width * scale;
-                    const finalH = offerImg.height * scale;
-
-                    const offerImgX = W * 0.5 - finalW / 2;
-                    const availableSpace = pedestalTopY - offerAreaTopY;
-                    const offerImgY = offerAreaTopY + (availableSpace / 2) - (finalH / 2);
-
-                    ctx.drawImage(offerImg, offerImgX, offerImgY, finalW, finalH);
-                }
-
-                // --- 4. Draw Offer Text (DYNAMIC SIZING & PERFECT ALIGNMENT) ---
-              // --- Offer Text Rendering with Auto Font Scaling ---
-// === OFFER TEXT AUTO FIT (Malayalam + Multi-line Support) ===
- const offerTextBoxY = H * 0.71;
-                const offerTextBoxHeight = H * 0.11;
-                const offerTextCenterX = W * 0.5;
-                const offerTextMaxWidth = W * 0.70;
-                
-
-let fontSize = 24;                 
-let lineHeightText = 38;
-
-// Function: wrap text based on available width
-// Function: wrap text based on available width and manual line breaks
-function wrapText(ctx, text, maxWidth) {
-  const paragraphs = text.split('\n'); // split where user pressed Enter
-  let lines = [];
-
-  paragraphs.forEach(paragraph => {
-    const words = paragraph.split(' ');
+    const words = text.split(' ');
     let line = '';
+    let finalY = y;
+    let lines = [];
 
     for (let n = 0; n < words.length; n++) {
-      const testLine = line + words[n] + ' ';
-      const metrics = ctx.measureText(testLine);
-      if (metrics.width > maxWidth && n > 0) {
-        lines.push(line.trim());
-        line = words[n] + ' ';
-      } else {
-        line = testLine;
-      }
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+            lines.push(line.trim());
+            line = words[n] + ' ';
+        } else {
+            line = testLine;
+        }
     }
-    lines.push(line.trim()); // push last line of paragraph
-  });
+    lines.push(line.trim());
 
+    for (let i = 0; i < Math.min(lines.length, maxLines); i++) {
+        ctx.fillText(lines[i], x, finalY);
+        finalY += lineHeight;
+    }
+
+    return { finalY: finalY };
+}
+
+function wrapTextRight(ctx, text, x, y, maxWidth, lineHeight) {
+    const words = text.split(' ');
+    let line = '';
+    let lines = [];
+
+    for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+            lines.push(line.trim());
+            line = words[n] + ' ';
+        } else {
+            line = testLine;
+        }
+    }
+    lines.push(line.trim());
+
+    let finalY = y;
+    for (let n = 0; n < lines.length; n++) {
+        ctx.fillText(lines[n], x, finalY);
+        finalY += lineHeight;
+    }
+
+    return { finalY: finalY };
+}
+
+// -------------------- main generateImage (kept mostly as you had it) --------------------
+function generateImage() {
+    // VALIDATIONS: allow offer image either via confirmed dataURL OR file input
+    if (!document.getElementById('companyLogo').files.length) {
+        alert("⚠️ Please upload the Company Logo!");
+        return;
+    }
+    
+    if (!document.getElementById('offerText').value.trim()) {
+        alert("⚠️ Please enter the Offer Text!");
+        return;
+    }
+    if (!document.getElementById('shopName').value.trim()) {
+        alert("⚠️ Please enter the Shop Name!");
+        return;
+    }
+    if (!document.getElementById('shopAddress').value.trim()) {
+        alert("⚠️ Please enter the Shop Address!");
+        return;
+    }
+    if (!document.getElementById('contact').value.trim()) {
+        alert("⚠️ Please enter Contact Number 1!");
+        return;
+    }
+
+    const W = 800, H = 800;
+    canvas.width = W;
+    canvas.height = H;
+
+    const offerText = document.getElementById('offerText').value.toUpperCase();
+    const shopName = document.getElementById('shopName').value;
+    const shopAddress = document.getElementById('shopAddress').value;
+    const contact = document.getElementById('contact').value;
+    const contact2 = document.getElementById('contact2').value || '';
+
+    // Draw background -> then logo -> then offer image -> text -> footer
+    loadImage('templateBackground', (bgImg) => {
+        if (!bgImg) return;
+        ctx.clearRect(0, 0, W, H);
+        ctx.drawImage(bgImg, 0, 0, W, H);
+
+        loadImage('companyLogo', (logo) => {
+            if (logo) {
+                const topBarY = H * 0.07;
+                const topBarH = H * 0.12;
+                const logoMaxW = W * 0.55;
+                const logoMaxH = topBarH * 0.90;
+
+                const widthScale = logoMaxW / logo.width;
+                const heightScale = logoMaxH / logo.height;
+                const scale = Math.min(widthScale, heightScale, 1.0);
+
+                const finalW = logo.width * scale;
+                const finalH = logo.height * scale;
+
+                const logoX = W * 0.5 - finalW / 2;
+                const logoY = topBarY + (topBarH / 2) - (finalH / 2) + 3;
+                ctx.drawImage(logo, logoX, logoY, finalW, finalH);
+            }
+
+            // Offer image (uses offerImageDataURL if confirmed OR file input)
+            loadImage('offerImage', (offerImg) => {
+                if (offerImg) {
+                    const pedestalTopY = H * 0.68;
+                    const offerAreaTopY = H * 0.28;
+                    const desiredMaxWidth = W * 0.50;
+                    const desiredMaxHeight = (pedestalTopY - offerAreaTopY) * 0.7;
+
+                    const widthScale = desiredMaxWidth / offerImg.width;
+                    const heightScale = desiredMaxHeight / offerImg.height;
+                    const scale = Math.min(widthScale, heightScale);
+
+                    const finalW = offerImg.width * scale;
+                    const finalH = offerImg.height * scale;
+                    const offerImgX = W * 0.5 - finalW / 2;
+                    const availableSpace = pedestalTopY - offerAreaTopY;
+                    const offerImgY = offerAreaTopY + (availableSpace / 2) - (finalH / 2);
+
+                    ctx.drawImage(offerImg, offerImgX, offerImgY, finalW, finalH);
+                }
+
+                // Offer text autosize & draw (kept your logic)
+                // --- OFFER TEXT LOGIC FIX ---
+
+// --- OFFER TEXT LOGIC (NO EXTRA BOX) ---
+
+// --- OFFER TEXT LOGIC (ONLY COUPON BACKGROUND SHOWS OFFER TEXT) ---
+
+// --- OFFER TEXT LOGIC (BLACK FOR COUPON, COLOR FOR OTHERS) ---
+
+// --- IMPROVED OFFER TEXT LOGIC (respects manual line breaks + perfect centering) ---
+
+const src = currentBgSource.toLowerCase();
+const isCouponMode = src.includes("coupon") || src.includes("c11");
+const hasOfferImage = !!offerImg;
+
+// Skip only if coupon has image
+if (isCouponMode && hasOfferImage) return;
+
+// Split text into manual lines first
+let userLines = offerText
+  .split(/\r?\n/)
+  .map(line => line.trim())
+  .filter(line => line.length > 0);
+
+// Auto-size font based on total line count and box width/height
+let fontSize = 34;
+let lineHeight;
+let lines = [];
+
+// Helper for wrapping single line if it’s too long
+function wrapSingleLine(ctxLocal, text, maxW) {
+  const words = text.split(' ');
+  let line = '', lines = [];
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + ' ';
+    if (ctxLocal.measureText(testLine).width > maxW && n > 0) {
+      lines.push(line.trim());
+      line = words[n] + ' ';
+    } else {
+      line = testLine;
+    }
+  }
+  lines.push(line.trim());
   return lines;
 }
 
-
-
-
-// Try to find best font size to fit inside box height
-let lines;
-
-
+// Calculate lines properly (manual + wrapped)
 do {
-    ctx.font = `bold ${fontSize}px "Noto Sans Malayalam", Arial`;
-    lines = wrapText(ctx, offerText, offerTextMaxWidth, 4); // <- limit to 4 lines
-    lineHeight = fontSize * 1.25;
-    const totalHeight = lines.length * lineHeight;
-    if (totalHeight > offerTextBoxHeight) {
-        fontSize -= 2; // shrink font gradually until fits
-    } else {
-        break;
-    }
-} while (fontSize > 12);
-do {
-    ctx.font = `bold ${fontSize}px "Noto Sans Malayalam", Arial`;
-    lines = wrapText(ctx, offerText, offerTextMaxWidth);
-    lineHeight = fontSize * 1.25;
-    const totalHeight = lines.length * lineHeight;
-    if (totalHeight > offerTextBoxHeight) {
-        fontSize -= 2; // shrink font gradually until fits
-    } else {
-        break;
-    }
+  ctx.font = `bold ${fontSize}px "Noto Sans Malayalam", Arial`;
+  lineHeight = fontSize * 1.25;
+  lines = [];
+  userLines.forEach(line => {
+    const wrapped = wrapSingleLine(ctx, line, W * 0.7);
+    lines.push(...wrapped);
+  });
+  if (lines.length * lineHeight > H * 0.13) fontSize -= 2;
+  else break;
 } while (fontSize > 12);
 
 ctx.font = `bold ${fontSize}px "Noto Sans Malayalam", Arial`;
 ctx.textAlign = 'center';
-ctx.fillStyle = selectedColor;
+ctx.textBaseline = 'middle';
 
-// 1. Set the baseline to middle for accurate centering
-ctx.textBaseline = 'middle'; 
+// Color logic
+ctx.fillStyle = isCouponMode ? "#000000" : selectedColor;
 
-// 2. Calculate the vertical center of the box
-const textCenterY = offerTextBoxY + (offerTextBoxHeight / 4);
-const totalTextHeight = lines.length * lineHeight;
+// Determine vertical start position
+const textBlockHeight = lines.length * lineHeight;
+const textBoxY = isCouponMode ? H * 0.54 : H * 0.74;
+const startY = textBoxY - textBlockHeight / 2 + lineHeight / 2;
 
-// 3. Find the Y-coordinate for the *center* of the first line
-let firstLineCenterY = textCenterY - (totalTextHeight / 4) + (lineHeight / 2);
-
-// Draw wrapped text lines, using the calculated center point
-lines.forEach((line, i) => {
-    ctx.fillText(line, offerTextCenterX, firstLineCenterY + i * lineHeight);
-});
-
-// Reset baseline to default if needed elsewhere (optional but good practice)
-// ctx.textBaseline = 'alphabetic';
-
-
-                // --- 5. Draw Footer Content (Contact Details and Footer Logo) ---
-
-// ✅ --- ADD THIS ABOVE YOUR FOOTER CODE ---
-
-// Left aligned wrap text — supports Enter key
-function wrapTextLeft(ctx, text, x, startY, maxWidth, lineHeight, maxLines) {
-  const paragraphs = text.split('\n');
-  let y = startY;
-  let lineCount = 0;
-
-  for (let p = 0; p < paragraphs.length; p++) {
-    const words = paragraphs[p].split(' ');
-    let line = '';
-
-    for (let n = 0; n < words.length; n++) {
-      const testLine = line + words[n] + ' ';
-      const metrics = ctx.measureText(testLine);
-
-      if (metrics.width > maxWidth && n > 0) {
-        ctx.fillText(line.trim(), x, y);
-        line = words[n] + ' ';
-        y += lineHeight;
-        lineCount++;
-        if (maxLines && lineCount >= maxLines) return { finalY: y };
-      } else {
-        line = testLine;
-      }
-    }
-
-    ctx.fillText(line.trim(), x, y);
-    y += lineHeight;
-    lineCount++;
-    if (maxLines && lineCount >= maxLines) return { finalY: y };
-  }
-
-  return { finalY: y };
-}
-
-// Right aligned wrap text — supports Enter key
-function wrapTextRight(ctx, text, x, startY, maxWidth, lineHeight, maxLines) {
-  const paragraphs = text.split('\n');
-  let y = startY;
-  let lineCount = 0;
-
-  for (let p = 0; p < paragraphs.length; p++) {
-    const words = paragraphs[p].split(' ');
-    let line = '';
-
-    for (let n = 0; n < words.length; n++) {
-      const testLine = line + words[n] + ' ';
-      const metrics = ctx.measureText(testLine);
-
-      if (metrics.width > maxWidth && n > 0) {
-        ctx.fillText(line.trim(), x, y);
-        line = words[n] + ' ';
-        y += lineHeight;
-        lineCount++;
-        if (maxLines && lineCount >= maxLines) return { finalY: y };
-      } else {
-        line = testLine;
-      }
-    }
-
-    ctx.fillText(line.trim(), x, y);
-    y += lineHeight;
-    lineCount++;
-    if (maxLines && lineCount >= maxLines) return { finalY: y };
-  }
-
-  return { finalY: y };
-}
-
-
-
-
-
-                const footerBoxY = H * 0.85;
-                const footerBoxH = H * 0.10;
-                const lineHeightFooter = 16;
-                const leftColumnX = W * 0.10;
-                const leftColumnWidth = W * 0.35; 
-                const rightColumnX = W * 0.90;
-                const rightColumnWidth = W * 0.25;
-
-                const maxLinesInFooterBlock = 4;
-                const totalBlockHeight = maxLinesInFooterBlock * lineHeightFooter;
-                const footerTextCenterY = footerBoxY + (footerBoxH / 2);
-
-                // Text Block Start Y: Centers the 4-line capacity block vertically
-                const textBlockStartY = footerTextCenterY - (totalBlockHeight / 2) + (lineHeightFooter * 0.5);
-
-                // Column 1: Left Side (Shop Details)
-                let currentYLeft = textBlockStartY;
-                ctx.font = 'bold 12px Arial';
-                // Use the selected color for the "FOR MORE DETAILS" header.
-                ctx.fillStyle = selectedColor; 
-                ctx.textAlign = 'left';
-                ctx.fillText("FOR MORE DETAILS", leftColumnX, currentYLeft);
-                currentYLeft += lineHeightFooter * 1.0;
-
-                ctx.font = 'bold 14px Arial';
-                ctx.fillStyle = '#000000'; // Keep shop details black
-
-                // Wrap and draw shop name
-                currentYLeft = wrapTextLeft(ctx, `VISIT ${shopName.toUpperCase()}`, leftColumnX, currentYLeft, leftColumnWidth, lineHeightFooter, 1).finalY;
-
-                // Wrap and draw shop address
-                if (shopAddress) {
-                    ctx.font = '12px Arial';
-                    const addressLineHeight = 14;
-                    wrapTextLeft(ctx, shopAddress.toUpperCase(), leftColumnX, currentYLeft - addressLineHeight * 0.1, leftColumnWidth, addressLineHeight, 3);
-                }
-
-                // Column 3: Right Side (Contact)
-                let currentYRight = textBlockStartY; 
-                ctx.font = 'bold 22px Arial';
-                ctx.fillStyle = '#000000'; // Keep contact header black
-                ctx.textAlign = 'right';
-                ctx.fillText("Contact", rightColumnX, currentYRight);
-                currentYRight += lineHeightFooter * 1.1;
-
-                ctx.font = 'bold 18px Arial';
-                // Contact 1 (wrapped)
-                currentYRight = wrapTextRight(ctx, contact, rightColumnX, currentYRight, rightColumnWidth, lineHeightFooter).finalY;
-
-                // Contact 2 (wrapped)
-                if (contact2) {
-                    ctx.font = '18px Arial';
-                    wrapTextRight(ctx, contact2, rightColumnX, currentYRight - lineHeightFooter * 0.0, rightColumnWidth, lineHeightFooter * 0.9);
-                }
-
-                // Column 2: Center (Footer Logo)
-                
-   
-
-
-// --- Function to draw footer logo ---
-// --- Column 2: Footer Logo (Always company logo) ---
-loadImage('companyLogo', (fLogo) => {
-    if (fLogo) {
-        const logoMaxW = W * 0.15;
-        const logoMaxH = footerBoxH * 0.9;
-        const centerColumnX = W * 0.47;
-        const centerColumnWidth = W * 0.24;
-        const footerCenterY = footerBoxY + (footerBoxH / 2);
-
-        const logoWidthScale = logoMaxW / fLogo.width;
-        const logoHeightScale = logoMaxH / fLogo.height;
-        const logoScale = Math.min(logoWidthScale, logoHeightScale);
-
-        const finalW = fLogo.width * logoScale;
-        const finalH = fLogo.height * logoScale;
-
-        const logoX = centerColumnX + (centerColumnWidth / 2) - (finalW / 2);
-        const logoY = footerCenterY - (finalH / 2) - 8;
-        ctx.drawImage(fLogo, logoX, logoY, finalW, finalH);
-    }
-
-    updateDownloadLink(canvas);
+// Draw lines perfectly centered
+lines.forEach((ln, i) => {
+  ctx.fillText(ln, W / 2, startY + i * lineHeight);
 });
 
 
-            }, true);
-        });
-    });
+// else (coupon + offer image) → no text drawn
+
+                
+                // Footer (kept your footer drawing code)
+                // --- FOOTER POSITION LOGIC ---
+// For coupon templates, move footer up (start earlier)
+
+
+if (isCouponMode) {
+    footerBoxY = H * 0.82//     
+    footerBoxH = H * 0.12; // Slightly taller for readability
+} else {
+    footerBoxY = H * 0.85; // Normal
+    footerBoxH = H * 0.10;
+}
+
+                const lineHeightFooter = 16;
+                const leftColumnX = W * 0.10;
+                const leftColumnWidth = W * 0.35;
+                const rightColumnX = W * 0.90;
+                const rightColumnWidth = W * 0.25;
+
+                const maxLinesInFooterBlock = 4;
+                const totalBlockHeight = maxLinesInFooterBlock * lineHeightFooter;
+                const footerTextCenterY = footerBoxY + (footerBoxH / 2);
+
+                const textBlockStartY = footerTextCenterY - (totalBlockHeight / 2) + (lineHeightFooter * 0.5);
+
+                let currentYLeft = textBlockStartY;
+                ctx.font = 'bold 14px Arial';
+                ctx.fillStyle = selectedColor;
+                ctx.textAlign = 'left';
+                ctx.fillText("FOR MORE DETAILS", leftColumnX, currentYLeft);
+                currentYLeft += lineHeightFooter * 1.0;
+
+                ctx.font = 'bold 14px Arial';
+                ctx.fillStyle = '#000000';
+                currentYLeft = wrapTextLeft(ctx, `VISIT ${shopName.toUpperCase()}`, leftColumnX, currentYLeft, leftColumnWidth, lineHeightFooter, 1).finalY;
+
+                if (shopAddress) {
+                    ctx.font = '15px Arial';
+                    const addressLineHeight = 15;
+                    wrapTextLeft(ctx, shopAddress.toUpperCase(), leftColumnX, currentYLeft - addressLineHeight * 0.1, leftColumnWidth, addressLineHeight, 3);
+                }
+
+                let currentYRight = textBlockStartY;
+                ctx.font = 'bold 24px Arial';
+                ctx.fillStyle = '#000000';
+                ctx.textAlign = 'right';
+                ctx.fillText("Contact", rightColumnX, currentYRight);
+                currentYRight += lineHeightFooter * 1.1;
+                ctx.font = 'bold 18px Arial';
+                currentYRight = wrapTextRight(ctx, contact, rightColumnX, currentYRight, rightColumnWidth, lineHeightFooter).finalY;
+                if (contact2) {
+                    ctx.font = '18px Arial';
+                    wrapTextRight(ctx, contact2, rightColumnX, currentYRight - lineHeightFooter * 0.0, rightColumnWidth, lineHeightFooter * 0.9);
+                }
+
+                // Footer center logo (re-use companyLogo)
+                // (We already loaded companyLogo above; to keep flow simple call loadImage again)
+                loadImage('companyLogo', (fLogo) => {
+                    if (fLogo) {
+                        const logoMaxW = W * 0.15;
+                        const logoMaxH = footerBoxH * 0.9;
+                        const centerColumnX = W * 0.47;
+                        const centerColumnWidth = W * 0.24;
+                        const footerCenterY = footerBoxY + (footerBoxH / 2);
+
+                        const logoWidthScale = logoMaxW / fLogo.width;
+                        const logoHeightScale = logoMaxH / fLogo.height;
+                        const logoScale = Math.min(logoWidthScale, logoHeightScale);
+
+                        const finalW = fLogo.width * logoScale;
+                        const finalH = fLogo.height * logoScale;
+
+                        const logoX = centerColumnX + (centerColumnWidth / 2) - (finalW / 2);
+                        const logoY = footerCenterY - (finalH / 2) - 8;
+                        ctx.drawImage(fLogo, logoX, logoY, finalW, finalH);
+                    }
+
+                    updateDownloadLink();
+                });
+
+            }); // end loadImage(offerImage)
+        }); // end loadImage(companyLogo)
+    }); // end loadImage(background)
 }
 
 
+function toggleOfferImageInput() {
+  const checkbox = document.getElementById('noOfferImageCheckbox');
+  const offerSection = document.getElementById('offerImageSection');
+  const offerInput = document.getElementById('offerImage');
 
+  if (checkbox.checked) {
+    // Hide both label + input
+    offerSection.style.display = 'none';
+
+    // Clear offer image data
+    offerInput.value = '';
+    offerImageFile = null;
+    offerImageDataURL = null;
+    offerImageRotation = 0;
+  } else {
+    // Show both label + input
+    offerSection.style.display = 'block';
+  }
+}
