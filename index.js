@@ -418,14 +418,22 @@ ctx.textBaseline = 'middle';
 ctx.fillStyle = isCouponMode ? "#000000" : selectedColor;
 
 // Determine vertical start position
+// Final vertical centering fix inside white offer box
+// Perfect Malayalam text centering inside white box
 const textBlockHeight = lines.length * lineHeight;
-const textBoxY = isCouponMode ? H * 0.54 : H * 0.74;
-const startY = textBoxY - textBlockHeight / 2 + lineHeight / 2;
 
-// Draw lines perfectly centered
+// Slight downward adjustment to avoid first-line clipping
+const textBoxY = isCouponMode ? H * 0.582 : H * 0.762;
+
+// Increase baseline offset slightly for tall Malayalam glyphs
+const startY = textBoxY - textBlockHeight / 2 + lineHeight * 0.45;
+
+// Draw all lines
 lines.forEach((ln, i) => {
   ctx.fillText(ln, W / 2, startY + i * lineHeight);
 });
+
+
 
 
 // else (coupon + offer image) → no text drawn
@@ -479,7 +487,7 @@ if (isCouponMode) {
                 ctx.textAlign = 'right';
                 ctx.fillText("Contact", rightColumnX, currentYRight);
                 currentYRight += lineHeightFooter * 1.1;
-                ctx.font = 'bold 18px Arial';
+                ctx.font = '18px Arial';
                 currentYRight = wrapTextRight(ctx, contact, rightColumnX, currentYRight, rightColumnWidth, lineHeightFooter).finalY;
                 if (contact2) {
                     ctx.font = '18px Arial';
